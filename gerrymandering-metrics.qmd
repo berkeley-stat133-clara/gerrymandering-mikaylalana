@@ -5,7 +5,41 @@ format: typst
 
 ### 2024 Election Results and the 2024 District Map
 
+# mean-median score
+district_results_2024 <- votes_prec_clean %>%
+  group_by(CDDIST) %>%
+  summarize(
+    dem = sum(CNGDEM01 + CNGDEM02, na.rm = TRUE),
+    rep = sum(CNGREP01 + CNGREP02, na.rm = TRUE),
+    total = dem + rep,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    dem_share = dem / (dem + rep)
+  )
+mm <- district_results_2024 %>%
+  summarise(
+    mean_v = mean(dem_share),
+    med_v = median(dem_share),
+    mm_score = mean_v - med_v
+  )
 
+
+# efficiency gap
+wasted_votes <- function(a, b) {
+  ifelse(a > b,
+         a - (a + b)/2,   # wasted if winning
+         a)              # wasted if losing
+}
+
+district_results_2024 <- district_results_2024 %>%
+  mutate(
+    wasted_dem = wasted_votes(dem, rep),
+    wasted_rep = wasted_votes(rep, dem)
+  )
+
+EG <- sum(district_results_2024$wasted_dem - district_results_2024$wasted_rep) /
+  sum(district_results_2024$dem + district_results_2024$rep)
 
 ### 2024 Election Results and the proposed 2025 District Map
 

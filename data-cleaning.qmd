@@ -3,3 +3,67 @@ title: Data Cleaning
 format: typst
 ---
 
+#focus on Q:
+# Will the adoption of the new district map lead to an increase in 
+# partisan advantage relative to 2024? If so, by how much?*
+
+# REPLACE N/A, n/a, NaN's, ASTRICTS & OTHER CHARECTERS W/ NA:
+votes_prec_clean <- votes_prec %>%
+  mutate(across(everything(), ~ {
+    # Ensure we treat data as a character, TEMPORARILY, this makes it 
+    # EASIEST to change 
+    cols_as_char <- as.character(.x) 
+     # Use na_if() for EXACT string matches ("N/A", "n/a"),
+    cols_cleaned <- na_if(cols_as_char, "N/A") 
+    cols_cleaned <- na_if(cols_cleaned, "n/a")
+    # Use str_detect() and replace() for PATTERN matches (*, #, !, NaN etc.),
+    # as na.if() cannot be used on "\\*|#|!|NaN" because it is a pattern, 
+    # NOT an exact match. 
+    # Note: R's "NaN" (Not a Number) typically handles itself if a column is numeric,
+    # but we can explicitly catch the text "NaN" if it exists in character columns.
+    pattern_to_NA <- "\\*|#|!|NaN" 
+    final_cols_cleaned <- replace(
+      cols_cleaned,
+      str_detect(cols_cleaned, pattern_to_NA),
+      NA
+    )
+    return(final_cols_cleaned)
+  })) %>%
+# CRUCIAL: Convert vote columns back to numeric AFTER cleaning charecters
+  mutate(across(c("TOTVOTE", "CNGDEM01", "CNGDEM02", "CNGREP01", "CNGREP02", "CNGIND01", "CDDIST"), 
+                as.numeric))
+
+#FIX SVPREC_KEY, AS THE PRECINCTS ENDING W/ "A" ARE JUST VOTES BY MAIL FOR THE SAME DISRICT
+# AS THEIR ASSOCIATED NUMERIC FORM (meaning: 06001200100A are just # mail in votes for the 
+# same district, also in the data, referenced as 06001200100, both under the same calumn called
+# SVPREC_KEY)
+# During this process, data in SVPREC_KEY NEED to be CHARACTERS. 
+# To merge the names and have a new column w/ the correct names, 
+# we gotta keep them as characters to keep this process EASY.
+dists_stand_vprec <- votes_prec_clean %>%
+  mutate(
+    # Ensure the identifier column is character type
+    SVPREC_KEY = as.character(SVPREC_KEY),
+    # Create the key used for grouping
+    stand_dist_key = str_replace(
+      SVPREC_KEY,
+      "A$",     
+      ""        
+    )
+  )
+#   - NOW that we have merged mail in votes from 06001200100A 
+#     into its district 06001200100,we've gotta sum up # of votes 
+#     for each district and place those numbers in their correct
+#     districts. 
+votes_aggregated <- dists_stand_vprec %>%
+  group_by(stand_dist_key) %>%
+  # Summarize (roll up) the data within each group
+  summarize(
+    across(
+      c("TOTVOTE", "CNGDEM01", "CNGDEM02", "CNGREP01", "CNGREP02", "CNGIND01", "PR_2_Y", "PR_2_N"), 
+      sum,            # The function to apply (sum)
+      na.rm = TRUE    # Ignore NAs during summation
+    ),
+    
+
+  )
